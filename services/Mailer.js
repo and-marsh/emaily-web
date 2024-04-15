@@ -14,6 +14,7 @@ class Mailer {
 
         this.sendBulkCommand = new SendBulkTemplatedEmailCommand({
             Source: "no-reply@andmarsh.cloudns.ch",
+            ConfigurationSetName: keys.awsConfigurationSetName,
             Template: "EmptyHtmlTemplate",
             DefaultTemplateData: `{ "subject": "${subject}", "html_body": "${content}" }`,
             Destinations: this.formatAddresses(recipients) }) }

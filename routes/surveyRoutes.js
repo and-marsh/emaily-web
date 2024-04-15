@@ -4,7 +4,8 @@ const requireCredits = require("../middlewares/requireCredits.js");
 const Survey = mongoose.model("surveys");
 const Mailer = require("../services/Mailer.js");
 const surveyTemplate = require("../services/emailTemplates/surveyTemplate.js");
-const bodyParser = require('body-parser')
+const bodyParser = require('body-parser');
+const request = require("request");
 
 module.exports = app => {
 
@@ -19,24 +20,40 @@ module.exports = app => {
         res.send("Thanks for voting!");
     });
 
-    app.post("/api/survey/webhooks", bodyParser.text(), (req, res) => {
-        const { surveyId, email, choice } = extractClickData(req.body);
+    app.post("/api/survey/webhooks", bodyParser.text(), async (req, res) => {
+        const jsonBody = JSON.parse(req.body);
 
-        Survey.updateOne(
-            {
-                _id: surveyId,
-                recipients: {
-                    $elemMatch: { email: email, responded: false },
+        if (jsonBody.Type === "SubscriptionConfirmation") {
+
+            await request(jsonBody.SubscribeURL, (err, response) =>{
+                if (!err && response.statusCode == 200) {
+                    console.log('We have accepted the confirmation from AWS');
+                }
+                else {
+                    throw new Error(`Unable to subscribe to given URL`);
+                }
+            });
+
+            res.send({});
+        } else {
+            const { surveyId, email, choice } = extractClickData(jsonBody);
+
+            Survey.updateOne(
+                {
+                    _id: surveyId,
+                    recipients: {
+                        $elemMatch: { email: email, responded: false },
+                    },
                 },
-            },
-            {
-                $inc: { [choice]: 1 },
-                $set: { 'recipients.$.responded': true },
-                lastResponded: new Date()
-            }
-        ).exec();
+                {
+                    $inc: { [choice]: 1 },
+                    $set: { 'recipients.$.responded': true },
+                    lastResponded: new Date()
+                }
+            ).exec();
 
-        res.send({});
+            res.send({});
+        }
     });
 
     app.post("/api/surveys", requireLogin, requireCredits, async (req, res) => {
@@ -74,8 +91,7 @@ module.exports = app => {
 };
 
 
-function extractClickData(body) {
-    const parsedBody = JSON.parse(body);
+function extractClickData(parsedBody) {
     const message = JSON.parse(parsedBody.Message);
 
     const eventType = message.eventType;
